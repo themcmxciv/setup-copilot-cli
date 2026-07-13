@@ -13,6 +13,11 @@ if ! command -v npm &> /dev/null; then
     exit 1
 fi
 
+# Detect the actual user and home directory if run with sudo
+REAL_USER="${SUDO_USER:-$USER}"
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+REAL_HOME="${REAL_HOME:-$HOME}"
+
 # Token limit constants (single source of truth)
 MAX_PROMPT_TOKENS=840000
 MAX_OUTPUT_TOKENS=128000
@@ -29,20 +34,21 @@ fi
 echo "--> Copilot CLI installed successfully."
 
 # 2. Prompt user for custom provider configuration
+# Note: '< /dev/tty' ensures prompts work even if the script is piped (e.g., via curl | bash)
 echo -e "\n[2/5] Configuring Custom LLM Provider..."
-read -p "Enter Custom Provider Base URL (e.g., https://api.yourprovider.com/v1): " PROVIDER_URL
-read -s -p "Enter Custom Provider API Key: " API_KEY
+read -p "Enter Custom Provider Base URL (e.g., https://api.yourprovider.com/v1): " PROVIDER_URL < /dev/tty
+read -s -p "Enter Custom Provider API Key: " API_KEY < /dev/tty
 echo "" # Print a newline after hidden input
-read -p "Enter Model ID (e.g., deepseek-v4-pro): " MODEL_ID
+read -p "Enter Model ID (e.g., deepseek-v4-pro): " MODEL_ID < /dev/tty
 
 # Detect active shell configuration file to persist variables
 SHELL_RC=""
 if [[ "$SHELL" == */zsh ]]; then
-    SHELL_RC="$HOME/.zshrc"
+    SHELL_RC="$REAL_HOME/.zshrc"
 elif [[ "$SHELL" == */bash ]]; then
-    SHELL_RC="$HOME/.bashrc"
+    SHELL_RC="$REAL_HOME/.bashrc"
 else
-    SHELL_RC="$HOME/.profile"
+    SHELL_RC="$REAL_HOME/.profile"
 fi
 
 # Append the Copilot custom provider variables to the shell configuration (idempotent)
@@ -61,7 +67,6 @@ else
             echo "export COPILOT_PROVIDER_MAX_OUTPUT_TOKENS=$MAX_OUTPUT_TOKENS"
         fi
         # COPILOT_OFFLINE=true disables cloud-assisted features (telemetry, remote model fallback).
-        # Remove this line or set to false if you want cloud features enabled.
         echo "export COPILOT_OFFLINE=true"
     } >> "$SHELL_RC"
 fi
@@ -102,9 +107,9 @@ fi
 
 # 4. Link LSPs to Copilot CLI Configuration
 echo -e "\n[4/5] Activating LSPs in Copilot Configuration..."
-mkdir -p "$HOME/.copilot"
+mkdir -p "$REAL_HOME/.copilot"
 
-cat << 'EOF' > "$HOME/.copilot/lsp-config.json"
+cat << 'EOF' > "$REAL_HOME/.copilot/lsp-config.json"
 {
   "lspServers": {
     "typescript": {
@@ -136,18 +141,18 @@ cat << 'EOF' > "$HOME/.copilot/lsp-config.json"
 }
 EOF
 
-echo "--> Created LSP map at $HOME/.copilot/lsp-config.json"
+echo "--> Created LSP map at $REAL_HOME/.copilot/lsp-config.json"
 
 # 5. Optional: Provision Caveman Mode Agent and set as default
 echo -e "\n[5/5] Optional: Caveman Mode Agent (terse, low-token responses)"
-read -p "Install Caveman Mode agent and set it as default? (y/N): " INSTALL_CAVEMAN
+read -p "Install Caveman Mode agent and set it as default? (y/N): " INSTALL_CAVEMAN < /dev/tty
 INSTALL_CAVEMAN=$(echo "$INSTALL_CAVEMAN" | tr '[:upper:]' '[:lower:]')
 
 if [[ "$INSTALL_CAVEMAN" == "y" || "$INSTALL_CAVEMAN" == "yes" ]]; then
     echo "--> Provisioning Custom Caveman Agent..."
-    mkdir -p "$HOME/.copilot/agents"
+    mkdir -p "$REAL_HOME/.copilot/agents"
 
-    cat << 'EOF' > "$HOME/.copilot/agents/caveman-mode.agent.md"
+    cat << 'EOF' > "$REAL_HOME/.copilot/agents/caveman-mode.agent.md"
 ---
 name: caveman-mode
 description: 'Terse, low-token responses. Minimal words, no fluff. Full capabilities preserved.'
@@ -169,7 +174,7 @@ Communication Rules
 - Drop articles: "Me fix code" not "I will fix the code."
 EOF
 
-    echo "--> Created Custom Agent configuration at $HOME/.copilot/agents/caveman-mode.agent.md"
+    echo "--> Created Custom Agent configuration at $REAL_HOME/.copilot/agents/caveman-mode.agent.md"
 
     # Set caveman-mode as the default agent
     echo "--> Setting caveman-mode as the default agent..."
